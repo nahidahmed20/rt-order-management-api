@@ -2,33 +2,67 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\User;
 use Illuminate\Http\Request;
+use App\Models\User;
 use Tymon\JWTAuth\Facades\JWTAuth;
+use Tymon\JWTAuth\Exceptions\JWTException;
 use Illuminate\Support\Facades\Hash;
 
-class AuthController extends Controller {
-    public function register(Request $request) {
-        $user = User::create([
-            'name' => $request->name,
-            'email'=> $request->email,
-            'password'=> Hash::make($request->password)
+class AuthController extends Controller
+{
+    public function login(Request $request)
+    {
+        $request->validate([
+            'email'    => 'required|email',
+            'password' => 'required|string|min:6',
         ]);
-        $token = JWTAuth::fromUser($user);
-        return response()->json(compact('user','token'));
-    }
 
-    public function login(Request $request) {
-        $credentials = $request->only('email','password');
-        if(!$token = JWTAuth::attempt($credentials)){
-            return response()->json(['error'=>'Invalid credentials'],401);
+        $credentials = $request->only('email', 'password');
+
+        try {
+            if (!$token = JWTAuth::attempt($credentials)) {
+                return response()->json(['error' => 'Invalid credentials'], 401);
+            }
+        } catch (JWTException $e) {
+            return response()->json(['error' => 'Could not create token'], 500);
         }
-        return response()->json(compact('token'));
+
+        return response()->json([
+            'token' => $token,
+            'user'  => auth()->user(), 
+        ]);
     }
 
-    public function logout() {
-        auth()->logout();
-        return response()->json(['message'=>'Logged out']);
+    public function me()
+    {
+        return response()->json(auth()->user());
+    }
+
+    public function logout()
+    {
+        JWTAuth::invalidate(JWTAuth::getToken());
+        return response()->json(['message' => 'Successfully logged out']);
+    }
+
+    public function register(Request $request)
+    {
+        $request->validate([
+            'name'     => 'required|string|max:255',
+            'email'    => 'required|email|unique:users',
+            'password' => 'required|string|min:6|confirmed',
+        ]);
+
+        $user = User::create([
+            'name'     => $request->name,
+            'email'    => $request->email,
+            'password' => Hash::make($request->password),
+        ]);
+
+        $token = JWTAuth::fromUser($user);
+
+        return response()->json([
+            'user'  => $user,
+            'token' => $token,
+        ]);
     }
 }
-
